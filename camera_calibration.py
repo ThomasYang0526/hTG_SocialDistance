@@ -21,7 +21,8 @@ class CameraCalibration(object):
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
         objp = np.zeros((checkerboard_dim[0]*checkerboard_dim[1], 3), np.float32)
         objp[:, :2] = np.mgrid[0:checkerboard_dim[0], 0:checkerboard_dim[1]].T.reshape(-1, 2) * checkerboard_size
-        images = glob.glob(self.cal_path + 'Single/Original/{}/*.jpg'.format(cam_type))
+        # images = glob.glob(self.cal_path + 'Single/Original/{}/*.jpg'.format(cam_type))
+        images = glob.glob(self.cal_path + '/*.jpg')
         images.sort()
 
         N_imm = len(images)
