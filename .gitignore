@@ -4,3 +4,7 @@
 *.jpg
 
 *.MOV
+
+__pycache__/
+
+*.pth

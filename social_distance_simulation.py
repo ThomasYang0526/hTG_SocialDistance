@@ -13,30 +13,29 @@ import pickle
 from scipy.spatial import distance as dist
 
 
-class SocialDistance(object):
-    def __init__(self, pickle_file, image_path):
+class SocialDistanceBase(object):
+    def __init__(self, pickle_file, image_path, shift_xy, pts_dst):
         self.pickle_file = pickle_file
         self.image_path = image_path
         self.pts_src = []
         self.person_num = 50
         self.MIN_DISTANCE = 70
         self.color_map = [list(np.random.random(size=3) * 256) for i in range(self.person_num)]
-        self.color = (0, 255, 0)
+        self.target_color = (0, 255, 0)
         self.thickness = 2
-        self.isClosed = True        
-        self.fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        self.out = cv2.VideoWriter('social_distance.avi', self.fourcc, 30.0, (1000, 480)) 
-
-        self.shift_x, self.shift_y = 200, 200
-        self.pts_dst = np.array([[0, 0], [70, 0], 
-                                 [70, 100], [0, 100],
-                                 ], np.int32) + [self.shift_x, self.shift_y]
-
-        with open(pickle_file, 'rb') as f:
-              self.cal_data = pickle.load(f)
-        
+        self.isClosed = True
+        self.shift_x, self.shift_y = shift_xy
+        self.pts_dst = pts_dst
         self.view_ori = cv2.imread(image_path)              
         self.view_land_ori = self.view_ori*0
+
+        # pickle file 
+        with open(pickle_file, 'rb') as f:
+              self.cal_data = pickle.load(f)
+        self.h_l,  self.w_l = self.view_ori.shape[:2]
+        self.newcameramtx, roi = cv2.getOptimalNewCameraMatrix(self.cal_data["M1"], self.cal_data["dist1"], 
+                                                               (self.w_l, self.h_l), 1, 
+                                                               (self.w_l, self.h_l))
 
         # random direction 
         self.dirt = np.sin(np.pi*np.random.random(size=self.person_num)*2) * 1
@@ -48,6 +47,10 @@ class SocialDistance(object):
         for i in range(self.person_num):
             self.persons_ori.append([random.randint(0, self.view_land_ori.shape[1]), random.randint(0, self.view_land_ori.shape[0])])
         self.persons_ori = np.float32(self.persons_ori).reshape(-1, 1, 2)
+
+        # save video config
+        self.fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        self.out = cv2.VideoWriter('social_distance.avi', self.fourcc, 30.0, (1000, 480)) 
         
     def click_and_crop(self, event, x, y, flags, param):
     	# grab references to the global variables    	
@@ -56,9 +59,7 @@ class SocialDistance(object):
     		cv2.circle(self.view_ori, (x, y), 5, (0, 255, 0), -1)
     		cv2.imshow("social_distance", self.view_ori)        
 
-    def manual_draw_bbox(self):        
-        h_l,  w_l = self.view_ori.shape[:2]
-        self.newcameramtx, roi = cv2.getOptimalNewCameraMatrix(self.cal_data["M1"], self.cal_data["dist1"], (w_l,h_l), 1, (w_l,h_l))
+    def simulation_(self):        
         self.view_ori = cv2.undistort(self.view_ori, self.cal_data["M1"], self.cal_data["dist1"], None, self.newcameramtx) 
         cv2.namedWindow("social_distance")
         cv2.setMouseCallback("social_distance", self.click_and_crop)
@@ -67,16 +68,15 @@ class SocialDistance(object):
         	key = cv2.waitKey(1) & 0xFF
         	if len(self.pts_src) == 4 or key == ord("c"):
         		self.pts_src = np.array(self.pts_src).astype(np.int32)
-        		self.view_ori = cv2.polylines(self.view_ori, [self.pts_src], self.isClosed, self.color, self.thickness)
+        		self.view_ori = cv2.polylines(self.view_ori, [self.pts_src], self.isClosed, self.target_color, self.thickness)
         		cv2.imshow("social_distance", self.view_ori)
         		cv2.waitKey(10)
         		break        
 
-    def simulation_(self):
-        self.view_ori = cv2.polylines(self.view_ori, [self.pts_src], self.isClosed, self.color, self.thickness)        
+        self.view_ori = cv2.polylines(self.view_ori, [self.pts_src], self.isClosed, self.target_color, self.thickness)        
         self.view_land_ori = cv2.rectangle(self.view_land_ori, (0, 0) , (self.view_land_ori.shape[1], self.view_land_ori.shape[0]), (0, 255, 255), self.thickness)
         self.view_land_ori = cv2.undistort(self.view_land_ori, self.cal_data["M1"], self.cal_data["dist1"], None, self.newcameramtx) 
-        self.view_land_ori = cv2.polylines(self.view_land_ori, [self.pts_src], self.isClosed, self.color, self.thickness) 
+        self.view_land_ori = cv2.polylines(self.view_land_ori, [self.pts_src], self.isClosed, self.target_color, self.thickness) 
         M = cv2.getPerspectiveTransform(self.pts_src.astype(np.float32), self.pts_dst.astype(np.float32));
         view_land_warp = cv2.warpPerspective(self.view_land_ori, M, (self.view_land_ori.shape[1],self. view_land_ori.shape[0])) 
       
@@ -119,10 +119,13 @@ class SocialDistance(object):
         cv2.destroyAllWindows()
         
 if __name__ == '__main__':
-    picke_file = 'stereo_calibration.pickle'
-    img_path = './images/img_dist.jpg'
-    sd = SocialDistance(picke_file, img_path)
-    sd.manual_draw_bbox()
+    pickle_file = 'stereo_calibration.pickle'
+    image_path = './simulation_images/img_dist.jpg'
+    shift_xy = (200, 200)
+    pts_dst = np.array([[0, 0], [70, 0], 
+                        [70, 100], [0, 100],
+                        ], np.int32) + shift_xy
+    sd = SocialDistanceBase(pickle_file, image_path, shift_xy, pts_dst)
     sd.simulation_()
         
         
